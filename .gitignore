@@ -1,23 +1,51 @@
-*.log
-.DS_Store
-.env.backup
-.env.production
-.phpactor.json
-.phpunit.result.cache
-/.fleet
-/.idea
-/.nova
-/.phpunit.cache
-/.vscode
-/.zed
-/auth.json
+# Laravel Default
 /node_modules
-/public/build
+/vendor
 /public/hot
 /public/storage
 /storage/*.key
 /storage/pail
-/vendor
+/storage/framework/cache/*
+/storage/framework/views/*
+/storage/framework/sessions/*
+/storage/logs/*
+.env
+.env.backup
+.env.production
+.phpunit.result.cache
 Homestead.json
 Homestead.yaml
+npm-debug.log
+yarn-error.log
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+*.log
+
+# IDE Files
+.idea
+.fleet
+.nova
+.vscode
+.zed
+.phpactor.json
+.phpunit.cache
+.terraform/
+
+# Docker (but keep necessary files)
+docker-compose.override.yml
+docker-compose.yml.dev
+
+# Development
+auth.json
+/public/build
+*.backup
+*.sqlite
+*.sqlite-journal
+/.phpunit.cache

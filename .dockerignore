@@ -1,0 +1,9 @@
+node_modules/
+vendor/
+.git/
+.env
+.gitignore
+README.md
+docker-compose.yml
+*.log
+*.sqlite
