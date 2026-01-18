@@ -138,61 +138,167 @@ echo "✅ Deployment complete! Starting Nginx/PHP-FPM..."
 LISTEN_PORT=${PORT:-80}
 echo "Starting web server on port ${LISTEN_PORT}..."
 
-# Update Nginx to listen on the correct port
-if [ -f "/etc/nginx/sites-enabled/default" ]; then
-    sed -i "s/listen 80;/listen ${LISTEN_PORT};/g" /etc/nginx/sites-enabled/default
-    echo "✅ Nginx configured to listen on port ${LISTEN_PORT}"
-else
-    echo "⚠️  Default Nginx config not found at /etc/nginx/sites-enabled/default"
-fi
+# ----------------------------------------------------------------------
+# CRITICAL FIX: Find the correct PHP-FPM socket for richarvey/nginx-php-fpm
+# ----------------------------------------------------------------------
 
-# Check PHP-FPM configuration
-echo "Checking PHP-FPM configuration..."
-PHP_FPM_CONF=$(find /etc -name "www.conf" -type f 2>/dev/null | head -1)
-if [ -n "$PHP_FPM_CONF" ]; then
-    PHP_FPM_SOCKET=$(grep -h "^listen\s*=" "$PHP_FPM_CONF" | head -1 | sed 's/^listen\s*=\s*//')
-    echo "PHP-FPM socket path: $PHP_FPM_SOCKET"
-else
-    echo "⚠️  PHP-FPM config not found, using defaults"
-    PHP_FPM_SOCKET="/var/run/php-fpm.sock"
-fi
+echo "Searching for PHP-FPM configuration in richarvey/nginx-php-fpm image..."
 
-# Start PHP-FPM
-echo "Starting PHP-FPM..."
-if php-fpm --daemonize; then
-    sleep 2  # Give PHP-FPM time to start
+# This image uses a non-standard setup. Let's find what's available:
+echo "Available PHP configurations:"
+find /etc -name "*php*" -type f 2>/dev/null | grep -E "(fpm|php)" | head -10
+
+# Try to find actual PHP-FPM socket or config
+PHP_SOCKET=""
+PHP_CONFIG=""
+
+# Common locations in this image
+POSSIBLE_PATHS=(
+    "/var/run/php/php8.2-fpm.sock"
+    "/var/run/php8-fpm.sock" 
+    "/var/run/php-fpm.sock"
+    "/tmp/php-fpm.sock"
+    "/var/run/php7-fpm.sock"
+)
+
+for sock_path in "${POSSIBLE_PATHS[@]}"; do
+    if [ -S "$sock_path" ]; then
+        PHP_SOCKET="$sock_path"
+        echo "✅ Found existing PHP socket at: $PHP_SOCKET"
+        break
+    fi
+done
+
+# If no socket exists, we need to start PHP-FPM with correct config
+if [ -z "$PHP_SOCKET" ]; then
+    echo "No existing socket found, will create one..."
     
-    # Verify PHP-FPM is actually running
-    if pgrep php-fpm > /dev/null; then
-        echo "✅ PHP-FPM process is running"
+    # Create directory for socket if it doesn't exist
+    mkdir -p /var/run/php
+    PHP_SOCKET="/var/run/php/php-fpm.sock"
+    
+    # Create a minimal PHP-FPM config if none exists
+    if [ ! -f "/etc/php8/php-fpm.d/www.conf" ]; then
+        echo "Creating PHP-FPM configuration..."
+        cat > /etc/php8/php-fpm.d/www.conf << 'EOF'
+[www]
+user = www-data
+group = www-data
+listen = /var/run/php/php-fpm.sock
+listen.owner = www-data
+listen.group = www-data
+pm = dynamic
+pm.max_children = 5
+pm.start_servers = 2
+pm.min_spare_servers = 1
+pm.max_spare_servers = 3
+EOF
+        echo "✅ Created PHP-FPM config at /etc/php8/php-fpm.d/www.conf"
+    fi
+fi
+
+echo "Using PHP socket: $PHP_SOCKET"
+
+# ----------------------------------------------------------------------
+# Update Nginx configuration to use the correct socket
+# ----------------------------------------------------------------------
+
+echo "Updating Nginx configuration..."
+
+# First, find Nginx config files
+NGINX_CONF_DIR="/etc/nginx"
+if [ -d "$NGINX_CONF_DIR" ]; then
+    # Update main nginx.conf if it exists
+    if [ -f "$NGINX_CONF_DIR/nginx.conf" ]; then
+        echo "Found nginx.conf, checking for PHP configuration..."
         
-        # Check if socket file exists
-        if [ -S "$PHP_FPM_SOCKET" ]; then
-            echo "✅ PHP-FPM socket created at $PHP_FPM_SOCKET"
-        else
-            echo "⚠️  PHP-FPM socket not found at $PHP_FPM_SOCKET"
-            echo "Checking for alternative socket locations..."
-            find /var/run -name "*.sock" 2>/dev/null || echo "No sockets found"
+        # Check if fastcgi_pass needs updating
+        if grep -q "fastcgi_pass" "$NGINX_CONF_DIR/nginx.conf"; then
+            sed -i "s|fastcgi_pass unix:[^;]*;|fastcgi_pass unix:$PHP_SOCKET;|g" "$NGINX_CONF_DIR/nginx.conf"
+            echo "✅ Updated fastcgi_pass in nginx.conf"
         fi
+    fi
+    
+    # Check sites-enabled directory
+    if [ -d "$NGINX_CONF_DIR/sites-enabled" ]; then
+        for site_conf in "$NGINX_CONF_DIR/sites-enabled"/*; do
+            if [ -f "$site_conf" ]; then
+                echo "Updating site config: $(basename $site_conf)"
+                # Update port
+                sed -i "s/listen 80;/listen ${LISTEN_PORT};/g" "$site_conf"
+                # Update PHP socket
+                sed -i "s|fastcgi_pass unix:[^;]*;|fastcgi_pass unix:$PHP_SOCKET;|g" "$site_conf"
+            fi
+        done
     else
-        echo "❌ PHP-FPM failed to start - process not found"
-        exit 1
+        echo "⚠️  sites-enabled directory not found"
+        # Check conf.d directory as alternative
+        if [ -d "$NGINX_CONF_DIR/conf.d" ]; then
+            for conf in "$NGINX_CONF_DIR/conf.d"/*; do
+                if [ -f "$conf" ]; then
+                    echo "Updating conf.d config: $(basename $conf)"
+                    sed -i "s|fastcgi_pass unix:[^;]*;|fastcgi_pass unix:$PHP_SOCKET;|g" "$conf"
+                fi
+            done
+        fi
+    fi
+fi
+
+# ----------------------------------------------------------------------
+# Start PHP-FPM with explicit socket configuration
+# ----------------------------------------------------------------------
+
+echo "Starting PHP-FPM..."
+# Force PHP-FPM to use our socket
+php-fpm --daemonize --fpm-config /etc/php8/php-fpm.conf
+
+# Wait for PHP-FPM to start
+sleep 3
+
+# Verify PHP-FPM is running
+if pgrep php-fpm > /dev/null; then
+    echo "✅ PHP-FPM process is running (PID: $(pgrep php-fpm))"
+    
+    # Check if socket was created
+    if [ -S "$PHP_SOCKET" ]; then
+        echo "✅ PHP-FPM socket created successfully at $PHP_SOCKET"
+        echo "Socket permissions:"
+        ls -la "$PHP_SOCKET"
+    else
+        echo "⚠️  Socket not created. Checking alternatives..."
+        # List all sockets
+        find /var/run -name "*.sock" -type s 2>/dev/null
     fi
 else
-    echo "❌ Failed to start PHP-FPM"
-    exit 1
+    echo "❌ PHP-FPM failed to start"
+    # Try alternative start method
+    echo "Trying alternative PHP-FPM start..."
+    /usr/sbin/php-fpm8 --daemonize
+    sleep 2
 fi
 
-# Verify Nginx configuration
-echo "Verifying Nginx configuration..."
+# ----------------------------------------------------------------------
+# Test Nginx configuration
+# ----------------------------------------------------------------------
+
+echo "Testing Nginx configuration..."
 if nginx -t; then
     echo "✅ Nginx configuration test passed"
 else
     echo "❌ Nginx configuration test failed"
+    echo "Last 10 lines of error:"
+    nginx -t 2>&1 | tail -10
     exit 1
 fi
 
-# Start Nginx in foreground
+# ----------------------------------------------------------------------
+# Start Nginx
+# ----------------------------------------------------------------------
+
 echo "Starting Nginx on port ${LISTEN_PORT}..."
-echo "Nginx will run in foreground. Container is now serving requests."
+echo "========================================"
+echo "Application URL: http://localhost:${LISTEN_PORT}"
+echo "External URL: https://buggxit.onrender.com"
+echo "========================================"
+echo "Nginx running in foreground. Container is live!"
 nginx -g 'daemon off;'
