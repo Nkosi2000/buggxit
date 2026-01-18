@@ -6,7 +6,8 @@ RUN apk add --no-cache --update nodejs npm=20.11.1-r0
 
 # Set environment variables for production
 ENV APP_ENV=production
-APP_DEBUG=false
+
+ENV APP_DEBUG=false
 
 # Copy your application code into the container
 COPY . /var/www/html
