@@ -2,7 +2,7 @@ FROM richarvey/nginx-php-fpm:3.1.2
 
 # Install a compatible version of Node.js (v20 LTS is recommended)
 # Use the 'nodejs-20' package for Alpine Linux
-RUN apk add --no-cache --update nodejs npm=20.11.1-r0
+RUN apk add --no-cache --update nodejs 
 
 # Set environment variables for production
 ENV APP_ENV=production
