@@ -2,6 +2,7 @@ node_modules/
 vendor/
 .git/
 .env
+.env.*
 .gitignore
 README.md
 docker-compose.yml

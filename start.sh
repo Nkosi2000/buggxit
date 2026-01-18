@@ -35,6 +35,8 @@ while [ $attempt -le $max_attempts ]; do
     echo "Attempt $attempt of $max_attempts to connect to database..."
     if php artisan migrate:status > /dev/null 2>&1; then
         echo "✅ Database connection successful!"
+        echo "Database driver actually being used: $(php artisan tinker --execute='echo config("database.default");')"
+        echo "Database host actually configured: $(php artisan tinker --execute='echo config("database.connections.pgsql.host");')"
         echo "Running database migrations..."
         php artisan migrate --force
         break
