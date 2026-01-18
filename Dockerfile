@@ -1,7 +1,7 @@
 FROM richarvey/nginx-php-fpm:3.1.2
 
 # Install Node.js and npm
-RUN apk add --no-cache nodejs npm=20.11.1-r0
+RUN apk add --no-cache --update nodejs npm=20.11.1-r0
 
 # Set environment variables for production
 ENV APP_ENV=production
