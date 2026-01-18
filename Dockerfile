@@ -13,6 +13,9 @@ RUN apk add --no-cache --update curl && \
 ENV APP_ENV=production \
     APP_DEBUG=false
 
+# Expose port 80 (REQUIRED for Render.com)
+EXPOSE 80
+
 # Copy your application code into the container
 COPY . /var/www/html
 

@@ -31,12 +31,14 @@ echo "Checking database connection..."
 max_attempts=10
 attempt=1
 
+# ... existing code ...
+
 while [ $attempt -le $max_attempts ]; do
     echo "Attempt $attempt of $max_attempts to connect to database..."
     if php artisan migrate:status > /dev/null 2>&1; then
-        echo "✅ Database connection successful!"
-        echo "Database driver actually being used: $(php artisan tinker --execute='echo config("database.default");')"
-        echo "Database host actually configured: $(php artisan tinker --execute='echo config("database.connections.pgsql.host");')"
+        # FIXED: Use proper quoting for the debug commands
+        echo "Database driver actually being used: $(php -r "echo config('database.default');")"
+        echo "Database host actually configured: $(php -r "echo config('database.connections.pgsql.host');")"
         echo "Running database migrations..."
         php artisan migrate --force
         break
@@ -106,23 +108,22 @@ fi
 
 echo "✅ Deployment complete! Starting Nginx/PHP-FPM..."
 
-# The richarvey/nginx-php-fpm image uses supervisord, not my_init
-# Check what init system is available and use the correct one
+# Use Render's PORT or default to 80
+LISTEN_PORT=${PORT:-80}
+echo "Starting web server on port ${LISTEN_PORT}..."
 
-if [ -f "/usr/bin/supervisord" ]; then
-    echo "Starting supervisord..."
-    exec /usr/bin/supervisord -c /etc/supervisord.conf
-elif [ -f "/start-web" ]; then
-    # Some versions have a start-web script
-    echo "Starting via start-web..."
-    exec /start-web
-elif [ -f "/start.sh" ] && [ "$(readlink -f /start.sh)" != "$(readlink -f /var/www/html/start.sh)" ]; then
-    # If there's a different start.sh in root, use it
-    echo "Starting via root start.sh..."
-    exec /start.sh
-else
-    # Fallback: directly start nginx and php-fpm
-    echo "Starting nginx and php-fpm directly..."
-    nginx -g 'daemon off;' &
-    exec php-fpm
+# Update Nginx to listen on the correct port
+if [ -f "/etc/nginx/sites-enabled/default" ]; then
+    sed -i "s/listen 80;/listen ${LISTEN_PORT};/g" /etc/nginx/sites-enabled/default
 fi
+
+# Start PHP-FPM in background
+php-fpm -D
+status=$?
+if [ $status -ne 0 ]; then
+    echo "Failed to start PHP-FPM: $status"
+    exit $status
+fi
+
+# Start Nginx in foreground (keeps container alive)
+nginx -g 'daemon off;'
