@@ -59,9 +59,34 @@ php artisan view:clear
 php artisan view:cache
 php artisan cache:clear
 
+
 # If using Vite, build assets
 if [ -f "package.json" ]; then
     echo "Building frontend assets..."
+    
+    # Check Node.js version
+    echo "Node.js version: $(node --version)"
+    echo "npm version: $(npm --version)"
+    
+    # Check if Node.js meets Vite requirements (20.19+ or 22.12+)
+    NODE_VERSION=$(node --version | tr -d 'v')
+    NODE_MAJOR=$(echo $NODE_VERSION | cut -d'.' -f1)
+    NODE_MINOR=$(echo $NODE_VERSION | cut -d'.' -f2)
+    
+    VITE_WARNING=false
+    if [ "$NODE_MAJOR" -lt 20 ]; then
+        VITE_WARNING=true
+    elif [ "$NODE_MAJOR" -eq 20 ] && [ "$NODE_MINOR" -lt 19 ]; then
+        VITE_WARNING=true
+    elif [ "$NODE_MAJOR" -eq 22 ] && [ "$NODE_MINOR" -lt 12 ]; then
+        VITE_WARNING=true
+    fi
+    
+    if [ "$VITE_WARNING" = true ]; then
+        echo "⚠️  WARNING: Node.js $NODE_VERSION detected. Vite requires Node.js 20.19+ or 22.12+."
+        echo "The build may fail or produce unexpected results."
+        echo "Consider updating your Dockerfile to install Node.js 20 or later."
+    fi
     
     # Clean npm cache to avoid permission issues
     npm cache clean --force
@@ -69,7 +94,7 @@ if [ -f "package.json" ]; then
     # Install dependencies (ci is better for production than install)
     npm ci --silent --no-audit --prefer-offline
     
-    # Build for production
+    # Build for production (continue even with version warning)
     npm run build --silent
     
     # Clean up npm cache to reduce image size
@@ -78,4 +103,24 @@ if [ -f "package.json" ]; then
 fi
 
 echo "✅ Deployment complete! Starting Nginx/PHP-FPM..."
-exec /sbin/my_init
+
+# The richarvey/nginx-php-fpm image uses supervisord, not my_init
+# Check what init system is available and use the correct one
+
+if [ -f "/usr/bin/supervisord" ]; then
+    echo "Starting supervisord..."
+    exec /usr/bin/supervisord -c /etc/supervisord.conf
+elif [ -f "/start-web" ]; then
+    # Some versions have a start-web script
+    echo "Starting via start-web..."
+    exec /start-web
+elif [ -f "/start.sh" ] && [ "$(readlink -f /start.sh)" != "$(readlink -f /var/www/html/start.sh)" ]; then
+    # If there's a different start.sh in root, use it
+    echo "Starting via root start.sh..."
+    exec /start.sh
+else
+    # Fallback: directly start nginx and php-fpm
+    echo "Starting nginx and php-fpm directly..."
+    nginx -g 'daemon off;' &
+    exec php-fpm
+fi

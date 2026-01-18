@@ -1,7 +1,13 @@
 FROM richarvey/nginx-php-fpm:3.1.2
 
-# Install Node.js and npm for Alpine Linux (both required)
-RUN apk add --no-cache --update nodejs npm
+# Install Node.js 20 (LTS) for Alpine Linux - USE PROPER VERSION
+RUN apk add --no-cache --update nodejs=20.11.1-r0 npm=10.2.4-r0
+
+# Alternative: If specific version isn't available, use NodeSource repository
+# RUN apk add --no-cache --update curl && \
+#     curl -fsSL https://unofficial-builds.nodejs.org/download/release/v20.19.0/node-v20.19.0-linux-x64-musl.tar.gz | tar -xz -C /usr/local --strip-components=1 && \
+#     ln -s /usr/local/bin/node /usr/bin/node && \
+#     ln -s /usr/local/bin/npm /usr/bin/npm
 
 # Set environment variables for production
 ENV APP_ENV=production \
@@ -13,7 +19,7 @@ COPY . /var/www/html
 # Set working directory
 WORKDIR /var/www/html
 
-# Install Composer dependencies (do this before copying start script for better layer caching)
+# Install Composer dependencies
 RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
 # Set proper permissions
