@@ -62,8 +62,19 @@ php artisan cache:clear
 # If using Vite, build assets
 if [ -f "package.json" ]; then
     echo "Building frontend assets..."
-    npm ci --silent
+    
+    # Clean npm cache to avoid permission issues
+    npm cache clean --force
+    
+    # Install dependencies (ci is better for production than install)
+    npm ci --silent --no-audit --prefer-offline
+    
+    # Build for production
     npm run build --silent
+    
+    # Clean up npm cache to reduce image size
+    npm cache clean --force
+    rm -rf ~/.npm /tmp/*
 fi
 
 echo "✅ Deployment complete! Starting Nginx/PHP-FPM..."
