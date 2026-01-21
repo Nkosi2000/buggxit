@@ -12,7 +12,7 @@ RUN apk add --no-cache \
     libzip-dev \
     oniguruma-dev \
     && docker-php-ext-install pdo pdo_pgsql mbstring exif pcntl bcmath gd zip \
-    && apk add --no-cache nodejs npm=20.15.1-r0
+    && apk add --no-cache nodejs npm --repository=http://dl-cdn.alpinelinux.org/alpine/v3.21/community
 
 # Set working directory
 WORKDIR /var/www/html
@@ -27,6 +27,9 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 # Install Composer dependencies
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
     && composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+
+# Install Node.js dependencies and build assets
+RUN npm ci --only=production && npm run build
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
