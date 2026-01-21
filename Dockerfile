@@ -1,18 +1,15 @@
 # ============================================
-# STAGE 1: Build assets with Node.js 20 (includes devDependencies)
+# STAGE 1: Build assets with Node.js 20
 # ============================================
 FROM node:20-alpine AS node-build
 
 WORKDIR /var/www/html
 
-# Copy only package files first for optimal layer caching
-COPY package*.json vite.config.js ./
+# Copy entire project for build context
+COPY . .
 
-# INSTALL ALL DEPENDENCIES, INCLUDING DEV, FOR THE BUILD
-RUN npm ci
-
-# Build the production assets (this command uses the installed 'vite')
-RUN npm run build
+# Install all dependencies and build
+RUN npm ci && npm run build
 
 # ============================================
 # STAGE 2: PHP application with built assets
@@ -33,11 +30,10 @@ RUN apk add --no-cache \
 
 WORKDIR /var/www/html
 
-# 1. Copy the application code
+# Copy the application code
 COPY . .
 
-# 2. COPY THE BUILT ASSETS FROM THE node-build STAGE
-# This is the critical step that brings in the compiled CSS/JS
+# Copy built assets from node-build stage
 COPY --from=node-build /var/www/html/public/build ./public/build/
 
 # Copy configuration files
@@ -47,7 +43,7 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 # Install Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-# Install Composer dependencies (no dev for production)
+# Install Composer dependencies
 RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
 # Set proper permissions for Laravel
