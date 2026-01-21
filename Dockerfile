@@ -37,6 +37,12 @@ RUN apk add --no-cache \
     oniguruma-dev \
     && docker-php-ext-install pdo pdo_pgsql mbstring exif pcntl bcmath gd zip
 
+# Create necessary directories and fix permissions early
+RUN mkdir -p /var/log/nginx /var/log/php \
+    && chown -R www-data:www-data /var/log/nginx /var/log/php \
+    && mkdir -p /var/tmp/nginx \
+    && chown -R www-data:www-data /var/tmp/nginx
+
 WORKDIR /var/www/html
 
 # Copy the application code
@@ -48,6 +54,10 @@ COPY --from=node-build /var/www/html/public/build ./public/build/
 # Copy configuration files
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY docker/www.conf /usr/local/etc/php-fpm.d/www.conf
+
+# Test Nginx configuration
+RUN nginx -t || (echo "Nginx configuration test failed" && cat /etc/nginx/nginx.conf && exit 1)
 
 # Install Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
@@ -57,7 +67,7 @@ RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoload
 
 # Set proper permissions for Laravel
 RUN mkdir -p storage/framework/{cache,sessions,views} bootstrap/cache \
-    && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
+    && chown -R www-data:www-data /var/www/html \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
 EXPOSE 80
