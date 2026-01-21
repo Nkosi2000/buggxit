@@ -5,11 +5,20 @@ FROM node:20-alpine AS node-build
 
 WORKDIR /var/www/html
 
-# Copy entire project for build context
+# 1. Copy ONLY package files first (better caching)
+COPY package*.json vite.config.js ./
+
+# 2. Install dependencies (this creates node_modules)
+RUN npm ci
+
+# 3. Copy the rest of the application code
 COPY . .
 
-# Install all dependencies and build
-RUN npm ci && npm run build
+# 4. Verify the CSS file exists
+RUN ls -la resources/css/ && cat resources/css/app.css
+
+# 5. Now run the build
+RUN npm run build
 
 # ============================================
 # STAGE 2: PHP application with built assets
