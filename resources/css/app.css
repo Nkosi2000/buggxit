@@ -1,9 +1,8 @@
 @import 'tailwindcss';
-@import 'tailwindcss/preflight';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
 
-
+/* Optional: If you need to import specific layers */
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
 
 @font-face {
     font-family: 'WalkwayRounded';
@@ -12,8 +11,6 @@
     font-style: normal;
 }
 
-
 body {
     font-family: 'WalkwayRounded', sans-serif;
 }
-
