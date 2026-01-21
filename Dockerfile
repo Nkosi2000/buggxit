@@ -1,33 +1,37 @@
 FROM richarvey/nginx-php-fpm:3.1.6
 
+# Set environment variables for the image
+ENV SKIP_COMPOSER 1
+ENV WEBROOT /var/www/html/public
+ENV RUN_SCRIPTS 1
+
+# Install Node.js, npm, and required PHP extensions
+RUN apk add --no-cache \
+    nodejs \
+    npm \
+    postgresql-dev \
+    && docker-php-ext-install pdo pdo_pgsql
+
 # Copy application code
 COPY . /var/www/html
 
 # Set working directory
 WORKDIR /var/www/html
 
-# Set environment variables for the image
-ENV SKIP_COMPOSER 1
-ENV WEBROOT /var/www/html/public
-
-# Install Node.js and npm for Vite build
-RUN apk add --no-cache nodejs npm
-
-# Install Composer dependencies and build frontend assets
+# Install dependencies and build
 RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader && \
-    npm ci && \
-    npm run build
+    npm ci --only=production && \
+    npm run build && \
+    php artisan storage:link && \
+    chown -R nginx:nginx /var/www/html/storage /var/www/html/bootstrap/cache && \
+    chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
-# Create a minimal .env file with non-secret defaults if it doesn't exist
-# (Render's environment variables will override these at runtime)
-RUN if [ ! -f .env ]; then \
-        echo "APP_ENV=local" > .env; \
-        echo "APP_DEBUG=true" >> .env; \
-        echo "LOG_CHANNEL=stderr" >> .env; \
-    fi
+# Clean up
+RUN rm -rf /var/www/html/node_modules && \
+    rm -rf /root/.npm && \
+    rm -rf /root/.composer
 
-# Copy and set up the deploy script
-COPY start.sh /start.sh
-RUN chmod +x /start.sh
+# Copy custom nginx configuration
+COPY docker/nginx.conf /etc/nginx/sites-available/default.conf
 
 # The image's default CMD will run /start.sh and then start Nginx/PHP-FPM

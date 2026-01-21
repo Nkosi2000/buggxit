@@ -1,18 +1,21 @@
 services:
   - type: web
-    name: buggxit-laravel
+    name: buggxit-store
     env: docker
-    plan: free
     dockerfilePath: ./Dockerfile
-    dockerContext: .
     envVars:
       - key: APP_ENV
         value: production
       - key: APP_DEBUG
         value: false
-    healthCheckPath: /
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_DRIVER
+        value: file
+    healthCheckPath: /health
     autoDeploy: true
-    disk:
-      name: laravel-storage
-      mountPath: /var/www/html/storage
-      sizeGB: 1
+    domains:
+      - buggxit.store
+      - www.buggxit.store

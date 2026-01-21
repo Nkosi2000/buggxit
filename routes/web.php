@@ -16,6 +16,14 @@ Route::get('/', function () {
     return view('pages.landing', compact('menus'));
 });
 
+Route::get('/health', function () {
+    return response()->json([
+        'status' => 'healthy',
+        'timestamp' => now(),
+        'environment' => app()->environment(),
+    ]);
+});
+
 // Admin routes
 Route::prefix('admin')->name('admin.')->group(function () {
     // Login routes (only for guests)
