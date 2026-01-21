@@ -1,37 +1,37 @@
-FROM richarvey/nginx-php-fpm:3.1.6
+# Use a PHP image with a specific, newer version of Node.js installed
+FROM php:8.3-fpm-alpine
 
-# Set environment variables for the image
-ENV SKIP_COMPOSER 1
-ENV WEBROOT /var/www/html/public
-ENV RUN_SCRIPTS 1
-
-# Install Node.js, npm, and required PHP extensions
+# Install system dependencies, PHP extensions, and Node.js 20
 RUN apk add --no-cache \
-    nodejs \
-    npm \
+    nginx \
+    supervisor \
+    curl \
+    git \
     postgresql-dev \
-    && docker-php-ext-install pdo pdo_pgsql
-
-# Copy application code
-COPY . /var/www/html
+    libpng-dev \
+    libzip-dev \
+    oniguruma-dev \
+    && docker-php-ext-install pdo pdo_pgsql mbstring exif pcntl bcmath gd zip \
+    && apk add --no-cache nodejs npm=20.15.1-r0
 
 # Set working directory
 WORKDIR /var/www/html
 
-# Install dependencies and build
-RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader && \
-    npm ci --only=production && \
-    npm run build && \
-    php artisan storage:link && \
-    chown -R nginx:nginx /var/www/html/storage /var/www/html/bootstrap/cache && \
-    chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+# Copy application code
+COPY . .
 
-# Clean up
-RUN rm -rf /var/www/html/node_modules && \
-    rm -rf /root/.npm && \
-    rm -rf /root/.composer
+# Copy configuration files
+COPY docker/nginx.conf /etc/nginx/nginx.conf
+COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Copy custom nginx configuration
-COPY docker/nginx.conf /etc/nginx/sites-available/default.conf
+# Install Composer dependencies
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer \
+    && composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
-# The image's default CMD will run /start.sh and then start Nginx/PHP-FPM
+# Set permissions
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
+    && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+
+# Expose port and start supervisor
+EXPOSE 80
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
