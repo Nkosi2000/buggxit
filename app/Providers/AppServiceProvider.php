@@ -3,8 +3,11 @@
 namespace App\Providers;
 
 use Illuminate\Support\Facades\URL;
+
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Session;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -13,7 +16,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        
     }
 
     /**
@@ -21,18 +24,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Force HTTPS in production (for both Render and Cloudflare)
-        if (App::environment('production')) {
-            URL::forceScheme('https');
-            
-            // Trust Cloudflare proxy headers
-            if (isset($_SERVER['HTTP_CF_VISITOR'])) {
-                $this->app['request']->server->set('HTTPS', true);
-            }
-            
-            // Set secure cookies
-            config(['session.secure' => true]);
-            config(['session.same_site' => 'lax']);
-        }
+        // Share cart count with all views
+        View::composer('*', function ($view) {
+            $cart = Session::get('cart', []);
+            $cartCount = array_sum($cart);
+            $view->with('cartCount', $cartCount);
+        });
     }
 }

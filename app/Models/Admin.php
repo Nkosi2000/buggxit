@@ -4,41 +4,36 @@ namespace App\Models;
 
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use App\Notifications\AdminResetPasswordNotification;
 
 class Admin extends Authenticatable
 {
     use Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     */
+    protected $guard = 'admin';
+
+    protected $table = 'admins';
+
     protected $fillable = [
         'name',
         'email',
         'password',
     ];
 
-    /**
-     * The attributes that should be hidden for arrays.
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * The attributes that should be cast.
-     */
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'password' => 'hashed', // ← CRITICAL for Laravel 8+ auto-hashing
     ];
 
     /**
-     * Send the password reset notification.
+     * Get the guard that should be used for the model.
      */
-    public function sendPasswordResetNotification($token)
+    public function guardName(): string
     {
-        $this->notify(new AdminResetPasswordNotification($token));
+        return 'admin';
     }
 }
